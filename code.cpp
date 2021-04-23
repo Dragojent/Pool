@@ -7,14 +7,14 @@
 const int WINDOW_WIDTH = 1200, WINDOW_HEIGHT = 800;
 const float FZERO = 0.00001f;
 
-void normalize(sf::Vector2f &v)
-{
-    v /= (float)sqrt(v.x * v.x + v.y * v.y);
-}
-
-float lengh(sf::Vector2f v)
+float length(sf::Vector2f v)
 {
     return sqrt(v.x * v.x + v.y * v.y);
+}
+
+void normalize(sf::Vector2f &v)
+{
+    v /= (float)length(v);
 }
 
 float distance(sf::Vector2f a, sf::Vector2f b)
@@ -55,7 +55,7 @@ class Ball : public sf::Drawable
         {
             updateAcceleration();
             updateVelocity();
-            if (lengh(m_velocity) != 0)
+            if (length(m_velocity) != 0)
                 checkCollision(balls);
 
             m_position += m_velocity;
@@ -108,7 +108,7 @@ class Ball : public sf::Drawable
                     continue;
 
                 sf::Vector2f dis{m_position.x - ball.position().x, m_position.y - ball.position().y};
-                if (lengh(dis) < m_renderer.getRadius() * 2)
+                if (length(dis) < m_renderer.getRadius() * 2)
                     collide(ball);
             }
         }
@@ -119,7 +119,7 @@ class Ball : public sf::Drawable
             normalize(dis);
 
             float tranferedForce = 0.6f;
-            float impactForce = lengh(m_velocity) * tranferedForce;
+            float impactForce = length(m_velocity) * tranferedForce;
 
             m_velocity *= 0.7f;
 
