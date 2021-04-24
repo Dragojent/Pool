@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <list>
+#include <algorithm>
 
 const int WINDOW_WIDTH = 1200, WINDOW_HEIGHT = 800;
 const float FZERO = 0.00001f;
@@ -22,20 +23,54 @@ float distance(sf::Vector2f a, sf::Vector2f b)
     return sqrt(a.x * b.x - a.y * b.y);
 }
 
+class Wall : public sf::Drawable
+{
+    public:
+        Wall(sf::Vector2f a, sf::Vector2f b) :
+            m_position(a), m_size(b), m_texture(sf::RectangleShape())
+        {
+            m_texture.setPosition(m_position);
+            m_texture.setSize(m_size);
+            m_texture.setFillColor(sf::Color::Magenta);
+        }
+        Wall() = delete;
+
+        void draw(sf::RenderTarget& target, sf::RenderStates states) const 
+        {
+            target.draw(m_texture);
+        }
+
+        sf::Vector2<sf::Vector2f> position()
+        {
+            return {m_position, m_size};
+        }
+    private:
+        sf::Vector2f m_position;
+        sf::Vector2f m_size;
+        sf::RectangleShape m_texture;
+};
+
+class Hole : public sf::Drawable
+{
+    public:
+    private:
+
+};
+
 class Ball : public sf::Drawable
 {
     public:
         Ball(sf::Vector2f position, unsigned int id) :
-            m_position(position), m_renderer(sf::CircleShape(10, 50)), m_ID(id) 
+            m_position(position), m_radius(10), m_sprite(sf::CircleShape(m_radius, 50)), m_ID(id) 
         {
             switch (m_ID)
             {
             case 1:
-                m_renderer.setFillColor(sf::Color::White);
+                m_sprite.setFillColor(sf::Color::White);
                 break;
             
             default:
-                m_renderer.setFillColor(sf::Color::Red);
+                m_sprite.setFillColor(sf::Color::Red);
                 break;
             }
         };
@@ -51,15 +86,18 @@ class Ball : public sf::Drawable
             m_velocity += force;
         }
 
-        sf::Vector2f move(std::list<Ball> &balls)
+        sf::Vector2f move(std::list<Ball> &balls, std::list<Wall> &walls)
         {
             updateAcceleration();
             updateVelocity();
             if (length(m_velocity) != 0)
+            {
+                checkCollision(walls);
                 checkCollision(balls);
+            }
 
             m_position += m_velocity;
-            m_renderer.setPosition(m_position.x - m_renderer.getRadius(), m_position.y - m_renderer.getRadius());
+            m_sprite.setPosition(m_position.x - m_radius, m_position.y - m_radius);
 
             return m_position;
         }
@@ -86,18 +124,23 @@ class Ball : public sf::Drawable
 
         void draw(sf::RenderTarget& target, sf::RenderStates states) const 
         {
-            target.draw(m_renderer);
+            target.draw(m_sprite);
         }
 
-        sf::CircleShape getRenderer() const
+        sf::CircleShape sprite() const
         {
-            return m_renderer;
+            return m_sprite;
         }
 
-        unsigned int id()
+        unsigned int id() const
         {
             return m_ID;
         }
+
+        float radius() const
+        {
+            return m_radius;
+        }       
 
     private:
         void checkCollision(std::list<Ball> &balls)
@@ -107,10 +150,45 @@ class Ball : public sf::Drawable
                 if (m_ID == ball.id())
                     continue;
 
-                sf::Vector2f dis{m_position.x - ball.position().x, m_position.y - ball.position().y};
-                if (length(dis) < m_renderer.getRadius() * 2)
+                sf::Vector2f distance{m_position.x - ball.position().x, m_position.y - ball.position().y};
+                float distanceSquared = distance.x * distance.x + distance.y * distance.y;
+                if (distanceSquared < m_radius * m_radius * 4)
                     collide(ball);
             }
+        }
+
+        void checkCollision(std::list<Wall> &walls)
+        {
+            for (auto &wall : walls)
+            {
+                float left = wall.position().x.x;
+                float right = wall.position().x.x + wall.position().y.x;
+                float top = wall.position().x.y;
+                float bottom = wall.position().x.y + wall.position().y.y;
+
+                float closestX = std::clamp(m_position.x, left, right);
+                float closestY = std::clamp(m_position.y, top, bottom);
+
+                float distanceX = m_position.x - closestX;
+                float distanceY = m_position.y - closestY;
+
+                float distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+                if (distanceSquared < m_radius * m_radius + m_radius * 3.f)
+                {
+                    if (distanceX == 0)
+                        collide(wall, true);
+                    else if (distanceY == 0)
+                        collide(wall, false);
+                }
+            }
+        }
+        
+        void collide(Wall &wall, bool horisontal)
+        {
+            if (horisontal)
+                m_velocity.y = -m_velocity.y;
+            else 
+                m_velocity.x = -m_velocity.x;
         }
 
         void collide(Ball &ball)
@@ -121,7 +199,7 @@ class Ball : public sf::Drawable
             float tranferedForce = 0.6f;
             float impactForce = length(m_velocity) * tranferedForce;
 
-            m_velocity *= 0.7f;
+            m_velocity *= 0.6f;
 
             ball.push(-dis * impactForce);
         }
@@ -145,23 +223,38 @@ class Ball : public sf::Drawable
             }
         }
 
+        float m_radius;
+        unsigned int m_ID;
         sf::Vector2f m_velocity;
         sf::Vector2f m_acceleration;
         sf::Vector2f m_position;
-        sf::CircleShape m_renderer;
-        unsigned int m_ID;
+        sf::CircleShape m_sprite;
 };
 
-void moveBalls(std::list<Ball> &balls)
+void moveBalls(std::list<Ball> &balls, std::list<Wall> &walls)
 {
     for (auto &ball : balls)
-        ball.move(balls);
+        ball.move(balls, walls);
 }
 
 void renderBalls(std::list<Ball> &balls, sf::RenderWindow &win)
 {
     for (auto &ball: balls)
         win.draw(ball);
+}
+
+void renderWalls(std::list<Wall> &walls, sf::RenderWindow &win)
+{
+    for (auto &wall : walls)
+        win.draw(wall);
+}
+
+void renderAll(std::list<Wall> &walls, std::list<Ball> &balls, sf::RenderWindow &win)
+{
+    win.clear();
+    renderWalls(walls, win);
+    renderBalls(balls, win);
+    win.display();
 }
 
 void reset(std::list<Ball> &balls)
@@ -189,6 +282,10 @@ int main()
 
     std::list<Ball> balls{};
     reset(balls);
+
+    std::list<Wall> walls{
+        {{50, 50},{500, 100}},
+    }; 
 
     while (win.isOpen())
     {
@@ -225,10 +322,8 @@ int main()
                 }
             }
         }
-        moveBalls(balls);
-        win.clear();
-        renderBalls(balls, win);
-        win.display();
+        moveBalls(balls, walls);
+        renderAll(walls, balls, win);
     }
     return 0;
 }
